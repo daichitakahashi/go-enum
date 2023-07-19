@@ -5,7 +5,7 @@ Idea from following video.
 
 This package provides support for defining `Visitor` and implementing `Accept()` methods.
 
-## Example
+## Usage
 Examples [here](./example).
 
 1. Prepare enum interface and member types.
@@ -72,3 +72,9 @@ type (
 ```
 
 5. Implement your visitor type!
+
+## Options for enumgen
+|option|description|default value|
+|---|---|---|
+|`-wd`|working directory|`.`|
+|`-out`|output file name|`enum.gen.go`|
