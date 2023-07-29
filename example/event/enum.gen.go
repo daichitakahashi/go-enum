@@ -3,24 +3,24 @@
 package event
 
 type (
-	EventVisitor interface {
-		VisitOrderPlaced(e OrderPlaced)
-		VisitPaymentReceived(e PaymentReceived)
-		VisitItemShipped(e ItemShipped)
+	EventHandler interface {
+		OnOrderPlaced(e OrderPlaced)
+		OnPaymentReceived(e PaymentReceived)
+		OnItemShipped(e ItemShipped)
 	}
 	EventEnum interface {
-		Accept(v EventVisitor)
+		Emit(v EventHandler)
 	}
 )
 
-func (e OrderPlaced) Accept(v EventVisitor) {
-	v.VisitOrderPlaced(e)
+func (e OrderPlaced) Emit(v EventHandler) {
+	v.OnOrderPlaced(e)
 }
-func (e PaymentReceived) Accept(v EventVisitor) {
-	v.VisitPaymentReceived(e)
+func (e PaymentReceived) Emit(v EventHandler) {
+	v.OnPaymentReceived(e)
 }
-func (e ItemShipped) Accept(v EventVisitor) {
-	v.VisitItemShipped(e)
+func (e ItemShipped) Emit(v EventHandler) {
+	v.OnItemShipped(e)
 }
 
 var _ = []EventEnum{OrderPlaced{}, PaymentReceived{}, ItemShipped{}}

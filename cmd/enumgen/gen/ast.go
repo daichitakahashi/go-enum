@@ -17,7 +17,7 @@ func importSpecs(s []*ast.ImportSpec) *ast.GenDecl {
 	return decl
 }
 
-func visitorSpec(visitorTypeName string, members []*ast.Ident) *ast.TypeSpec {
+func visitorSpec(r *namingRegistry, enumIdent string, members []*ast.Ident) *ast.TypeSpec {
 	// ExampleVisitor interface {
 	// 	VisitA(e A)
 	// 	VisitB(e B)
@@ -27,7 +27,7 @@ func visitorSpec(visitorTypeName string, members []*ast.Ident) *ast.TypeSpec {
 	for _, m := range members {
 		methodList = append(methodList, &ast.Field{
 			Names: []*ast.Ident{
-				ast.NewIdent(fmt.Sprintf("Visit%s", m)),
+				ast.NewIdent(r.visitMethodName(enumIdent, m.String())),
 			},
 			Type: &ast.FuncType{
 				Params: &ast.FieldList{
@@ -45,7 +45,7 @@ func visitorSpec(visitorTypeName string, members []*ast.Ident) *ast.TypeSpec {
 	}
 
 	return &ast.TypeSpec{
-		Name: ast.NewIdent(visitorTypeName),
+		Name: ast.NewIdent(r.visitorTypeName(enumIdent)),
 		Type: &ast.InterfaceType{
 			Methods: &ast.FieldList{
 				List: methodList,
@@ -54,19 +54,19 @@ func visitorSpec(visitorTypeName string, members []*ast.Ident) *ast.TypeSpec {
 	}
 }
 
-func enumSpec(enumTypeName, visitorTypeName string) *ast.TypeSpec {
+func enumSpec(r *namingRegistry, enumIdent string) *ast.TypeSpec {
 	// ExampleEnum interface {
 	// 	Accept(v ExampleVisitor)
 	// }
 
 	return &ast.TypeSpec{
-		Name: ast.NewIdent(enumTypeName),
+		Name: ast.NewIdent(fmt.Sprintf("%sEnum", enumIdent)),
 		Type: &ast.InterfaceType{
 			Methods: &ast.FieldList{
 				List: []*ast.Field{
 					{
 						Names: []*ast.Ident{
-							ast.NewIdent("Accept"),
+							ast.NewIdent(r.acceptMethodName(enumIdent)),
 						},
 						Type: &ast.FuncType{
 							Params: &ast.FieldList{
@@ -75,7 +75,7 @@ func enumSpec(enumTypeName, visitorTypeName string) *ast.TypeSpec {
 										Names: []*ast.Ident{
 											ast.NewIdent("v"),
 										},
-										Type: ast.NewIdent(visitorTypeName),
+										Type: ast.NewIdent(r.visitorTypeName(enumIdent)),
 									},
 								},
 							},
@@ -87,7 +87,7 @@ func enumSpec(enumTypeName, visitorTypeName string) *ast.TypeSpec {
 	}
 }
 
-func acceptImpl(ident *ast.Ident, visitorTypeName string) *ast.FuncDecl {
+func acceptImpl(r *namingRegistry, enumIdent string, member *ast.Ident) *ast.FuncDecl {
 	// func (e A) Accept(v ExampleVisitor) {
 	// 	v.VisitA(e)
 	// }
@@ -102,11 +102,11 @@ func acceptImpl(ident *ast.Ident, visitorTypeName string) *ast.FuncDecl {
 					Names: []*ast.Ident{
 						enumVal,
 					},
-					Type: ident,
+					Type: member,
 				},
 			},
 		},
-		Name: ast.NewIdent("Accept"),
+		Name: ast.NewIdent(r.acceptMethodName(enumIdent)),
 		Type: &ast.FuncType{
 			Params: &ast.FieldList{
 				List: []*ast.Field{
@@ -114,7 +114,7 @@ func acceptImpl(ident *ast.Ident, visitorTypeName string) *ast.FuncDecl {
 						Names: []*ast.Ident{
 							visitor,
 						},
-						Type: ast.NewIdent(visitorTypeName),
+						Type: ast.NewIdent(r.visitorTypeName(enumIdent)),
 					},
 				},
 			},
@@ -125,7 +125,7 @@ func acceptImpl(ident *ast.Ident, visitorTypeName string) *ast.FuncDecl {
 					X: &ast.CallExpr{
 						Fun: &ast.SelectorExpr{
 							X:   visitor,
-							Sel: ast.NewIdent(fmt.Sprintf("Visit%s", ident)),
+							Sel: ast.NewIdent(r.visitMethodName(enumIdent, member.String())),
 						},
 						Args: []ast.Expr{
 							enumVal,
@@ -137,7 +137,7 @@ func acceptImpl(ident *ast.Ident, visitorTypeName string) *ast.FuncDecl {
 	}
 }
 
-func typeCheckDecl(enumTypeName string, members []*ast.Ident) *ast.GenDecl {
+func typeCheckDecl(enumIdent string, members []*ast.Ident) *ast.GenDecl {
 	// var _ = []ExampleEnum{
 	// 	A{},
 	// 	B{},
@@ -160,7 +160,7 @@ func typeCheckDecl(enumTypeName string, members []*ast.Ident) *ast.GenDecl {
 				Values: []ast.Expr{
 					&ast.CompositeLit{
 						Type: &ast.ArrayType{
-							Elt: ast.NewIdent(enumTypeName),
+							Elt: ast.NewIdent(fmt.Sprintf("%sEnum", enumIdent)),
 						},
 						Elts: enumMembers,
 					},
