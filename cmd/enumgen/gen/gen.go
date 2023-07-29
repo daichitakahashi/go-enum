@@ -38,7 +38,7 @@ func loadPackage() (*packages.Package, error) {
 	return nil, errors.New("no package loaded")
 }
 
-func Run(wd, filename string) {
+func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept []NamingAcceptParams) {
 	err := os.Chdir(wd)
 	if err != nil {
 		log.Fatal(err)
@@ -52,6 +52,7 @@ func Run(wd, filename string) {
 	f := &ast.File{
 		Name: ast.NewIdent(pkg.Name),
 	}
+	registry := newNamingRegistry(namingVisitor, namingAccept)
 
 	// enumパッケージをインポートしているファイルを抽出する。
 	type targetFile struct {
@@ -137,25 +138,22 @@ func Run(wd, filename string) {
 	}
 
 	generateDecl := pipelineStage(func(in enumInfo, out chan ast.Decl) {
-		var (
-			visitorTypeName = fmt.Sprintf("%sVisitor", in.ident)
-			enumTypeName    = fmt.Sprintf("%sEnum", in.ident)
-		)
+		enumIdent := fmt.Sprint(in.ident)
 		out <- &ast.GenDecl{
 			Tok: token.TYPE,
 			Specs: []ast.Spec{
-				visitorSpec(visitorTypeName, in.members),
-				enumSpec(enumTypeName, visitorTypeName),
+				visitorSpec(registry, enumIdent, in.members),
+				enumSpec(registry, enumIdent),
 			},
 		}
 
 		// implementations of Accept
 		for _, m := range in.members {
-			out <- acceptImpl(m, visitorTypeName)
+			out <- acceptImpl(registry, enumIdent, m)
 		}
 
 		// type checks
-		out <- typeCheckDecl(enumTypeName, in.members)
+		out <- typeCheckDecl(enumIdent, in.members)
 	})
 
 	decls := generateDecl(
@@ -167,8 +165,13 @@ func Run(wd, filename string) {
 			),
 		),
 	)
+	var count int
 	for decl := range decls {
 		f.Decls = append(f.Decls, decl)
+		count++
+	}
+	if count == 0 {
+		log.Fatal("target type not found")
 	}
 
 	code, err := generateCode(f)

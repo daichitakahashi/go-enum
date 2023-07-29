@@ -6,7 +6,7 @@ import (
 	"github.com/daichitakahashi/go-enum"
 )
 
-//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest
+//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest --visitor="Event:EventHandler:On*" --accept="Event:Emit"
 
 type (
 	Event interface {
