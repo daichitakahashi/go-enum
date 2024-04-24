@@ -4,23 +4,23 @@ package event
 
 type (
 	EventHandler interface {
-		OnOrderPlaced(e OrderPlaced)
-		OnPaymentReceived(e PaymentReceived)
-		OnItemShipped(e ItemShipped)
+		OnOrderPlaced(e OrderPlaced) error
+		OnPaymentReceived(e PaymentReceived) error
+		OnItemShipped(e ItemShipped) error
 	}
 	EventEnum interface {
-		Emit(v EventHandler)
+		Emit(v EventHandler) error
 	}
 )
 
-func (e OrderPlaced) Emit(v EventHandler) {
-	v.OnOrderPlaced(e)
+func (e OrderPlaced) Emit(v EventHandler) error {
+	return v.OnOrderPlaced(e)
 }
-func (e PaymentReceived) Emit(v EventHandler) {
-	v.OnPaymentReceived(e)
+func (e PaymentReceived) Emit(v EventHandler) error {
+	return v.OnPaymentReceived(e)
 }
-func (e ItemShipped) Emit(v EventHandler) {
-	v.OnItemShipped(e)
+func (e ItemShipped) Emit(v EventHandler) error {
+	return v.OnItemShipped(e)
 }
 
 var _ = []EventEnum{OrderPlaced{}, PaymentReceived{}, ItemShipped{}}
