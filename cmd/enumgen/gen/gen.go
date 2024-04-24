@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	packagePath = "github.com/daichitakahashi/go-enum"
-	enumSymbol  = "MemberOf"
+	packagePath          = "github.com/daichitakahashi/go-enum"
+	enumSymbol           = "MemberOf"
+	visitorReturnsSymbol = "VisitorReturns"
 )
 
 func loadPackage() (*packages.Package, error) {
@@ -54,7 +55,6 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 	}
 	registry := newNamingRegistry(namingVisitor, namingAccept)
 
-	// enumパッケージをインポートしているファイルを抽出する。
 	type targetFile struct {
 		file        *ast.File
 		enumPackage string
@@ -88,12 +88,12 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 		}
 	})
 
-	collectEnumDefinitions := pipelineStage(func(in targetFile, out chan enumDefinition) {
+	collectEnumDefinitions := pipelineStage(func(in targetFile, out chan enumMemberDefinition) {
 		for _, decl := range in.file.Decls {
 			if typeDecl, ok := decl.(*ast.GenDecl); ok {
 				for _, spec := range typeDecl.Specs {
 					if typeSpec, ok := spec.(*ast.TypeSpec); ok {
-						if def, ok := checkEnumDefinition(in.enumPackage, typeSpec); ok {
+						if def, ok := extractEnumMemberDefinition(in.enumPackage, typeSpec); ok {
 							out <- *def
 						}
 					}
@@ -101,26 +101,57 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 			}
 		}
 	})
+	collectEnumIdentDefinitions := pipelineStage(func(in targetFile, out chan enumIdentDefinition) {
+		for _, decl := range in.file.Decls {
+			if typeDecl, ok := decl.(*ast.GenDecl); ok {
+				for _, spec := range typeDecl.Specs {
+					if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+						if def, ok := extractEnumIdentDefinition(in.enumPackage, typeSpec); ok {
+							out <- *def
+						}
+					}
+				}
+			}
+		}
+	})
+	collectDefinitions := merge(collectEnumDefinitions, collectEnumIdentDefinitions, func(o1 []enumMemberDefinition, o2 []enumIdentDefinition) pair[[]enumMemberDefinition, map[string]enumIdentDefinition] {
+		m := make(map[string]enumIdentDefinition)
+		for _, d := range o2 {
+			m[fmt.Sprint(d.ident)] = d
+		}
+		return pair[[]enumMemberDefinition, map[string]enumIdentDefinition]{
+			left:  o1,
+			right: m,
+		}
+	})
 
 	// assemble enumInfo per enum type
 	type enumInfo struct {
-		ident   ast.Expr
-		members []*ast.Ident
+		ident              ast.Expr
+		members            []*ast.Ident
+		visitorReturnIdent ast.Expr
 	}
-	assembleEnumInfo := func(in <-chan enumDefinition) <-chan enumInfo {
+	assembleEnumInfo := func(in pair[[]enumMemberDefinition, map[string]enumIdentDefinition]) <-chan enumInfo {
 		var (
 			dict = map[string]*enumInfo{}
 			list []*enumInfo
 		)
 
-		for def := range in {
+		for _, def := range in.left {
 			enumIdent := fmt.Sprint(def.enumIdent)
+
+			var visitorReturnIdent ast.Expr
+			if e, ok := in.right[enumIdent]; ok {
+				visitorReturnIdent = e.visitorReturnIdent
+			}
+
 			if info, ok := dict[enumIdent]; ok {
 				info.members = append(info.members, def.ident)
 			} else {
 				info := &enumInfo{
-					ident:   def.enumIdent,
-					members: []*ast.Ident{def.ident},
+					ident:              def.enumIdent,
+					members:            []*ast.Ident{def.ident},
+					visitorReturnIdent: visitorReturnIdent,
 				}
 				dict[enumIdent] = info
 				list = append(list, info)
@@ -142,35 +173,33 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 		out <- &ast.GenDecl{
 			Tok: token.TYPE,
 			Specs: []ast.Spec{
-				visitorSpec(registry, enumIdent, in.members),
-				enumSpec(registry, enumIdent),
+				visitorSpec(registry, enumIdent, in.members, in.visitorReturnIdent),
+				enumSpec(registry, enumIdent, in.visitorReturnIdent),
 			},
 		}
 
 		// implementations of Accept
 		for _, m := range in.members {
-			out <- acceptImpl(registry, enumIdent, m)
+			out <- acceptImpl(registry, enumIdent, m, in.visitorReturnIdent)
 		}
 
 		// type checks
 		out <- typeCheckDecl(enumIdent, in.members)
 	})
 
-	decls := generateDecl(
-		assembleEnumInfo(
-			collectEnumDefinitions(
-				collectTargetPackages(
-					iterate(pkg.Syntax),
+	decls :=
+		pipe(collectTargetPackages,
+			pipe(collectDefinitions,
+				pipe(assembleEnumInfo,
+					generateDecl,
 				),
 			),
-		),
-	)
-	var count int
+		)(iterate(pkg.Syntax))
+
 	for decl := range decls {
 		f.Decls = append(f.Decls, decl)
-		count++
 	}
-	if count == 0 {
+	if len(f.Decls) == 0 {
 		log.Fatal("target type not found")
 	}
 

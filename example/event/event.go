@@ -10,6 +10,8 @@ import (
 
 type (
 	Event interface {
+		enum.VisitorReturns[error]
+		EventEnum
 		ID() string
 	}
 
