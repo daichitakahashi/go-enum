@@ -229,3 +229,232 @@ func typeCheckDecl(enumIdent string, members []*ast.Ident) *ast.GenDecl {
 		},
 	}
 }
+
+func visitorImplSpec(r *namingRegistry, enumIdent string, members []*ast.Ident, visitorReturnIdent ast.Expr) *ast.GenDecl {
+	// type __ExampleVisitor struct {
+	// 	__VisitA func(A) error
+	// 	__VisitB func(B) error
+	// }
+
+	var results *ast.FieldList
+	if visitorReturnIdent != nil {
+		results = &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: visitorReturnIdent,
+				},
+			},
+		}
+	}
+
+	var fields []*ast.Field
+	for _, m := range members {
+		fields = append(fields,
+			&ast.Field{
+				Names: []*ast.Ident{
+					ast.NewIdent(fmt.Sprintf("__%s", r.visitMethodName(enumIdent, m.String()))),
+				},
+				Type: &ast.FuncType{
+					Params: &ast.FieldList{
+						List: []*ast.Field{
+							{
+								Type: m,
+							},
+						},
+					},
+					Results: results,
+				},
+			})
+	}
+
+	return &ast.GenDecl{
+		Tok: token.TYPE,
+		Specs: []ast.Spec{
+			&ast.TypeSpec{
+				Name: ast.NewIdent(fmt.Sprintf("__%s", r.visitorTypeName(enumIdent))),
+				Type: &ast.StructType{
+					Fields: &ast.FieldList{
+						List: fields,
+					},
+				},
+			},
+		},
+	}
+}
+
+func visitorFactoryImpl(registry *namingRegistry, enumIdent, visitorFactoryName string, members []*ast.Ident, visitorReturnIdent ast.Expr) *ast.FuncDecl {
+	// func NewExampleVisitor(
+	// 	__VisitA func(e A) error,
+	// 	__VisitB func(e B) error,
+	// ) ExampleVisitor {
+	// 	return &__ExampleVisitor{
+	// 		__VisitA: __VisitA,
+	// 		__VisitB: __VisitB,
+	// 	}
+	// }
+
+	var (
+		visitorFactory  = ast.NewIdent(visitorFactoryName)
+		visitorType     = ast.NewIdent(registry.visitorTypeName(enumIdent))
+		visitorImplType = ast.NewIdent(fmt.Sprintf("__%s", registry.visitorTypeName(enumIdent)))
+		visitorReturns  *ast.FieldList
+
+		args        []*ast.Field
+		compositeKv []ast.Expr
+	)
+
+	if visitorReturnIdent != nil {
+		visitorReturns = &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: visitorReturnIdent,
+				},
+			},
+		}
+	}
+
+	for _, m := range members {
+		fieldName := ast.NewIdent(fmt.Sprintf("__%s", registry.visitMethodName(enumIdent, m.String())))
+		args = append(args, &ast.Field{
+			Names: []*ast.Ident{
+				fieldName,
+			},
+			Type: &ast.FuncType{
+				Params: &ast.FieldList{
+					List: []*ast.Field{
+						{
+							Names: []*ast.Ident{
+								ast.NewIdent("e"),
+							},
+							Type: m,
+						},
+					},
+				},
+				Results: visitorReturns,
+			},
+		})
+		compositeKv = append(compositeKv, &ast.KeyValueExpr{
+			Key:   fieldName,
+			Value: fieldName,
+		})
+	}
+
+	return &ast.FuncDecl{
+		Name: visitorFactory,
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: args,
+			},
+			Results: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Type: visitorType,
+					},
+				},
+			},
+		},
+		Body: &ast.BlockStmt{
+			List: []ast.Stmt{
+				&ast.ReturnStmt{
+					Results: []ast.Expr{
+						&ast.UnaryExpr{
+							Op: token.AND,
+							X: &ast.CompositeLit{
+								Type: visitorImplType,
+								Elts: compositeKv,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func visitorImpl(registry *namingRegistry, enumIdent string, member *ast.Ident, visitorReturnIdent ast.Expr) *ast.FuncDecl {
+	// func (v __ExampleVisitor) VisitA(e A) error {
+	// 	return v.__VisitA(e)
+	// }
+
+	var (
+		stmts   []ast.Stmt
+		results *ast.FieldList
+		enumVal = ast.NewIdent("e")
+		visitor = ast.NewIdent("v")
+	)
+
+	if visitorReturnIdent != nil {
+		// func (v __ExampleVisitor) VisitA(e A) visitorReturnIdent {
+		// 	return v.__VisitA(e)
+		// }
+		results = &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Type: visitorReturnIdent,
+				},
+			},
+		}
+		stmts = []ast.Stmt{
+			&ast.ReturnStmt{
+				Results: []ast.Expr{
+					&ast.CallExpr{
+						Fun: &ast.SelectorExpr{
+							X:   visitor,
+							Sel: ast.NewIdent(fmt.Sprintf("__%s", registry.visitMethodName(enumIdent, member.String()))),
+						},
+						Args: []ast.Expr{
+							enumVal,
+						},
+					},
+				},
+			},
+		}
+	} else {
+		// func (v __ExampleVisitor) VisitA(e A) {
+		// 	v.__VisitA(e)
+		// }
+		stmts = []ast.Stmt{
+			&ast.ExprStmt{
+				X: &ast.CallExpr{
+					Fun: &ast.SelectorExpr{
+						X:   visitor,
+						Sel: ast.NewIdent(registry.visitMethodName(enumIdent, member.String())),
+					},
+					Args: []ast.Expr{
+						enumVal,
+					},
+				},
+			},
+		}
+	}
+
+	return &ast.FuncDecl{
+		Recv: &ast.FieldList{
+			List: []*ast.Field{
+				{
+					Names: []*ast.Ident{
+						visitor,
+					},
+					Type: ast.NewIdent(fmt.Sprintf("__%s", registry.visitorTypeName(enumIdent))),
+				},
+			},
+		},
+		Name: ast.NewIdent(registry.visitMethodName(enumIdent, member.String())),
+		Type: &ast.FuncType{
+			Params: &ast.FieldList{
+				List: []*ast.Field{
+					{
+						Names: []*ast.Ident{
+							enumVal,
+						},
+						Type: member,
+					},
+				},
+			},
+			Results: results,
+		},
+		Body: &ast.BlockStmt{
+			List: stmts,
+		},
+	}
+}

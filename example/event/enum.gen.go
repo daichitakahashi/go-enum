@@ -24,3 +24,22 @@ func (e ItemShipped) Emit(v EventHandler) error {
 }
 
 var _ = []EventEnum{OrderPlaced{}, PaymentReceived{}, ItemShipped{}}
+
+type __EventHandler struct {
+	__OnOrderPlaced     func(OrderPlaced) error
+	__OnPaymentReceived func(PaymentReceived) error
+	__OnItemShipped     func(ItemShipped) error
+}
+
+func NewEventHandler(__OnOrderPlaced func(e OrderPlaced) error, __OnPaymentReceived func(e PaymentReceived) error, __OnItemShipped func(e ItemShipped) error) EventHandler {
+	return &__EventHandler{__OnOrderPlaced: __OnOrderPlaced, __OnPaymentReceived: __OnPaymentReceived, __OnItemShipped: __OnItemShipped}
+}
+func (v __EventHandler) OnOrderPlaced(e OrderPlaced) error {
+	return v.__OnOrderPlaced(e)
+}
+func (v __EventHandler) OnPaymentReceived(e PaymentReceived) error {
+	return v.__OnPaymentReceived(e)
+}
+func (v __EventHandler) OnItemShipped(e ItemShipped) error {
+	return v.__OnItemShipped(e)
+}
