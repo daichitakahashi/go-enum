@@ -39,7 +39,7 @@ func loadPackage() (*packages.Package, error) {
 	return nil, errors.New("no package loaded")
 }
 
-func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept []NamingAcceptParams) {
+func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept []NamingAcceptParams, namingVisitorFactory []NamingVisitorImplParams) {
 	err := os.Chdir(wd)
 	if err != nil {
 		log.Fatal(err)
@@ -53,7 +53,7 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 	f := &ast.File{
 		Name: ast.NewIdent(pkg.Name),
 	}
-	registry := newNamingRegistry(namingVisitor, namingAccept)
+	registry := newNamingRegistry(namingVisitor, namingAccept, namingVisitorFactory)
 
 	type targetFile struct {
 		file        *ast.File
@@ -185,6 +185,16 @@ func Run(wd, filename string, namingVisitor []NamingVisitorParams, namingAccept 
 
 		// type checks
 		out <- typeCheckDecl(enumIdent, in.members)
+
+		// visitor impl factory
+		visitorFactory, found := registry.visitorImplFactoryName(enumIdent)
+		if found {
+			out <- visitorImplSpec(registry, enumIdent, in.members, in.visitorReturnIdent)
+			out <- visitorFactoryImpl(registry, enumIdent, visitorFactory, in.members, in.visitorReturnIdent)
+			for _, m := range in.members {
+				out <- visitorImpl(registry, enumIdent, m, in.visitorReturnIdent)
+			}
+		}
 	})
 
 	decls :=

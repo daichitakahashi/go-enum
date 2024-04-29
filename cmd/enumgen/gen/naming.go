@@ -18,9 +18,15 @@ type NamingAcceptParams struct {
 	MethodName string
 }
 
+type NamingVisitorImplParams struct {
+	Target      string
+	FactoryName string
+}
+
 type namingRegistry struct {
-	visitors []NamingVisitorParams
-	accepts  []NamingAcceptParams
+	visitors     []NamingVisitorParams
+	accepts      []NamingAcceptParams
+	visitorImpls []NamingVisitorImplParams
 
 	visitorParamsCache map[string]*NamingVisitorParams
 	visitorTypeCache   map[string]string
@@ -28,10 +34,11 @@ type namingRegistry struct {
 	acceptMethodCache  map[string]string
 }
 
-func newNamingRegistry(visitors []NamingVisitorParams, accepts []NamingAcceptParams) *namingRegistry {
+func newNamingRegistry(visitors []NamingVisitorParams, accepts []NamingAcceptParams, visitorImpls []NamingVisitorImplParams) *namingRegistry {
 	return &namingRegistry{
-		visitors: visitors,
-		accepts:  accepts,
+		visitors:     visitors,
+		accepts:      accepts,
+		visitorImpls: visitorImpls,
 
 		visitorParamsCache: map[string]*NamingVisitorParams{},
 		visitorTypeCache:   map[string]string{},
@@ -103,4 +110,20 @@ func (r *namingRegistry) acceptMethodName(enumIdent string) string {
 	name := strings.Replace(namingParams.MethodName, "*", enumIdent, 1)
 	r.acceptMethodCache[enumIdent] = name
 	return name
+}
+
+func (r *namingRegistry) visitorImplFactoryName(enumIdent string) (string, bool) {
+	var namingParams *NamingVisitorImplParams
+	for _, f := range r.visitorImpls {
+		if wildcard.MatchSimple(f.Target, enumIdent) {
+			namingParams = &f
+			break
+		}
+	}
+	if namingParams == nil {
+		return "", false
+	}
+	visitorTypeName := r.visitorTypeName(enumIdent)
+	name := strings.Replace(namingParams.FactoryName, "*", visitorTypeName, 1)
+	return name, true
 }

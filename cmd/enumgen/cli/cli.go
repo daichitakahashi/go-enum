@@ -15,10 +15,11 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	wd       string
-	out      string
-	visitors []string
-	accepts  []string
+	wd           string
+	out          string
+	visitors     []string
+	accepts      []string
+	visitorImpls []string
 )
 
 func init() {
@@ -27,6 +28,7 @@ func init() {
 	flags.StringVar(&out, "out", "enum.gen.go", "output file name")
 	flags.StringSliceVar(&visitors, "visitor", nil, "")
 	flags.StringSliceVar(&accepts, "accept", nil, "")
+	flags.StringSliceVar(&visitorImpls, "visitor-impl", nil, "")
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -46,7 +48,11 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 		namingAcceptParams = append(namingAcceptParams, *params)
 	}
-	gen.Run(wd, out, namingVisitorParams, namingAcceptParams)
+	namingVisitorImplParams := make([]gen.NamingVisitorImplParams, 0, len(visitorImpls))
+	for _, f := range visitorImpls {
+		namingVisitorImplParams = append(namingVisitorImplParams, parseNamingVisitorFactoryParams(f))
+	}
+	gen.Run(wd, out, namingVisitorParams, namingAcceptParams, namingVisitorImplParams)
 	return nil
 }
 
@@ -73,6 +79,19 @@ func parseNamingAcceptParams(s string) (*gen.NamingAcceptParams, error) {
 		Target:     target,
 		MethodName: name,
 	}, nil
+}
+
+// --visitor-factory="*Event"
+// --visitor-factory="*Event:New*"
+func parseNamingVisitorFactoryParams(s string) gen.NamingVisitorImplParams {
+	target, name, ok := strings.Cut(s, ":")
+	if !ok {
+		name = "New*"
+	}
+	return gen.NamingVisitorImplParams{
+		Target:      target,
+		FactoryName: name,
+	}
 }
 
 func Run() {
