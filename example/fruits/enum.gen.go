@@ -24,3 +24,22 @@ func (e Grape) Accept(v FruitsVisitor) {
 }
 
 var _ = []FruitsEnum{Apple{}, Orange{}, Grape{}}
+
+type __FruitsVisitor struct {
+	__VisitApple  func(Apple)
+	__VisitOrange func(Orange)
+	__VisitGrape  func(Grape)
+}
+
+func NewFruitsVisitor(__VisitApple func(e Apple), __VisitOrange func(e Orange), __VisitGrape func(e Grape)) FruitsVisitor {
+	return &__FruitsVisitor{__VisitApple: __VisitApple, __VisitOrange: __VisitOrange, __VisitGrape: __VisitGrape}
+}
+func (v __FruitsVisitor) VisitApple(e Apple) {
+	v.VisitApple(e)
+}
+func (v __FruitsVisitor) VisitOrange(e Orange) {
+	v.VisitOrange(e)
+}
+func (v __FruitsVisitor) VisitGrape(e Grape) {
+	v.VisitGrape(e)
+}
