@@ -80,10 +80,11 @@ type (
 |`--out`|output file name|`enum.gen.go`|
 |`--visitor`|customize `Visitor` type & method names|`*:*Visitor:Visit*`|
 |`--accept`|customize `Accept` method name|`*:Accept`|
+|`--visitor-impl`|generate `Visitor` implementation and its factory||
 
 ### `--visitor` option
 The value of `--visitor` option consists of three parts with the delimiter ":".
-1. The target type name(enum interface) of customization.  
+1. The target type name(enum identifier interface) of customization.  
 Pattern match using `*` is allowed.
 2. The visitor type name pattern.  
 If the pattern contains `*`, it will replaced with the target type name.
@@ -91,15 +92,55 @@ If the pattern contains `*`, it will replaced with the target type name.
 If the pattern contains `*`, it will replaced with the member type name.
 
 ### `--accept` option
-The value of `--accept` option consists of two parts with the delimiter ":"
-1. The target type name(enum interface) of customization.  
+The value of `--accept` option consists of two parts with the delimiter ":".
+1. The target type name(enum identifier interface) of customization.  
 Pattern match using `*` is allowed.
 2. The accept method name pattern.  
 If the pattern contains `*`, it will replaced with the target type name.
 
 `--visitor` and `--accept` options can be used multiple times.
 
-## Example: use enumgen for domain events.
+### `--visitor-impl` option
+The value of `--visitor-impl` option consists of one part or two parts with the delimiter ":".
+1. The target type name(enum identifier interface) to implement.  
+Pattern match using `*` is allowed.
+2. The factory function name pattern(if omitted, use `"New*"`).  
+If the pattern contains `*`, it will replaced with the target type name.
+
+## Return type of visitor method.
+If you need return type T of visitor (and accept) methods, embed `enum.VisitorReturns[T]` to enum identifier interface.
+```go
+type Fruits interface {
+	enum.VisitorReturns[error]
+}
+```
+
+Preceding enum identifier derives following code.
+
+```go
+type (
+	FruitsVisitor interface {
+		VisitApple(e Apple) error
+		VisitOrange(e Orange) error
+		VisitGrape(e Grape) error
+	}
+	FruitsEnum interface {
+		Accept(v FruitsVisitor) error
+	}
+)
+
+func (e Apple) Accept(v FruitsVisitor) error {
+	return v.VisitApple(e)
+}
+func (e Orange) Accept(v FruitsVisitor) error {
+	return v.VisitOrange(e)
+}
+func (e Grape) Accept(v FruitsVisitor) error {
+	return v.VisitGrape(e)
+}
+```
+
+## Example: use enumgen for domain event handler.
 ```go
 package event
 
@@ -109,11 +150,12 @@ import (
 	"github.com/daichitakahashi/go-enum"
 )
 
-//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest --visitor="Event:EventHandler:On*" --accept="Event:Emit"
+//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest --visitor="Event:EventHandler:On*" --accept="Event:Emit" --visitor-impl="*"
 
 type (
 	Event interface {
 		ID() string
+		enum.VisitorReturns[error]
 	}
 
 	OrderPlaced struct {
@@ -182,4 +224,24 @@ func (e ItemShipped) Emit(v EventHandler) {
 }
 
 var _ = []EventEnum{OrderPlaced{}, PaymentReceived{}, ItemShipped{}}
+
+type __EventHandler struct {
+	__OnOrderPlaced     func(OrderPlaced) error
+	__OnPaymentReceived func(PaymentReceived) error
+	__OnItemShipped     func(ItemShipped) error
+}
+
+func NewEventHandler(__OnOrderPlaced func(e OrderPlaced) error, __OnPaymentReceived func(e PaymentReceived) error, __OnItemShipped func(e ItemShipped) error) EventHandler {
+	return &__EventHandler{__OnOrderPlaced: __OnOrderPlaced, __OnPaymentReceived: __OnPaymentReceived, __OnItemShipped: __OnItemShipped}
+}
+func (v __EventHandler) OnOrderPlaced(e OrderPlaced) error {
+	return v.__OnOrderPlaced(e)
+}
+func (v __EventHandler) OnPaymentReceived(e PaymentReceived) error {
+	return v.__OnPaymentReceived(e)
+}
+func (v __EventHandler) OnItemShipped(e ItemShipped) error {
+	return v.__OnItemShipped(e)
+}
+
 ```
