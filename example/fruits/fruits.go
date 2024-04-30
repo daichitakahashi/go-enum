@@ -2,7 +2,7 @@ package fruits
 
 import "github.com/daichitakahashi/go-enum"
 
-//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest
+//go:generate go run github.com/daichitakahashi/go-enum/cmd/enumgen@latest --visitor-impl "*"
 
 type (
 	Fruits interface{}
